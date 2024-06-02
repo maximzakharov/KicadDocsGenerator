@@ -1,0 +1,25 @@
+{
+    "$schema": "https://go.kicad.org/pcm/schemas/v1",
+    "name": "KicadDocsGenerator",
+    "description": "This plugin automates the creation of all essential documentation required for PCB manufacturing.",
+    "description_full": "This plugin automates the creation of all essential documentation required for PCB manufacturing, including Gerber files, BOM (Bill of Materials), assembly drawings, and fabrication notes.",
+    "identifier": "com.github.MaximZakharov.KicadDocsGenerator",
+    "type": "plugin",
+    "author": {
+        "name": "MaximZakharov",
+        "contact": {
+            "web": "https://github.com/maximzakharov"
+        }
+    },
+    "license": "GPL-3.0",
+    "resources": {
+        "homepage": "https://github.com/maximzakharov/KicadDocsGenerator"
+    },
+    "versions": [
+        {
+            "version": "1.0",
+            "status": "testing",
+            "kicad_version": "7.0"
+        }
+    ]
+}
