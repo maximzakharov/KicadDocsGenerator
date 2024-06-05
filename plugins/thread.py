@@ -94,7 +94,8 @@ class ProcessThread(Thread):
         temp_dir = os.path.join(os.path.dirname(self.process_manager.board.GetFileName()), "temp")
         temp_file = os.path.join(temp_dir, "tmp")
 
-        project_name = self.process_manager.board.GetFileName().split("/")[-1].split(".")[0]
+        project_path = self.process_manager.board.GetFileName()
+        project_name = os.path.splitext(os.path.basename(project_path))[0]
         project_directory = os.path.dirname(self.process_manager.board.GetFileName())
         current_time = datetime.strftime(datetime.now(), "%d-%m-%Y")
         version = self.process_manager.get_revision(self.process_manager.board.GetFileName())
