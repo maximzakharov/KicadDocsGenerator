@@ -4,10 +4,13 @@ import os
 
 from .thread import ProcessThread
 from .events import StatusEvent
+from .logs import LoggerConfig
 
 
 class ProgressDialog(wx.Frame):
     def __init__(self):
+        self.logger = LoggerConfig()
+
         wx.Dialog.__init__(
             self,
             None,
@@ -28,7 +31,7 @@ class ProgressDialog(wx.Frame):
         bSizer1.Fit(self)
         self.Centre(wx.BOTH)
         StatusEvent.invoke(self, self.updateDisplay)
-        ProcessThread(self)
+        ProcessThread(self, self.logger)
 
     def updateDisplay(self, status):
         if status.data == -1:

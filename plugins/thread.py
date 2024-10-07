@@ -11,44 +11,20 @@ from . import plot
 import pcbnew
 import configparser
 from datetime import datetime
-import logging
 import subprocess
 import platform
-
 
 def bool_convert(text):
     return text == "True"
 
 
 class ProcessThread(Thread):
-    def __init__(self, wx):
+    def __init__(self, wx, logs):
+        self.logger = logs
         Thread.__init__(self)
-        self.process_manager = ProcessManager()
+        self.process_manager = ProcessManager(self.logger)
         self.wx = wx
         self.start()
-
-        current_dir = os.path.dirname(__file__)
-
-        log_level = logging.INFO
-        LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-        file_handler = logging.FileHandler(os.path.join(current_dir, "thread.log"))
-        file_handler.setLevel(log_level)
-        file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(log_level)
-        console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-
-        if len(logging.getLogger().handlers) == 0:
-            logging.basicConfig(level=log_level, format=LOG_FORMAT, handlers=[file_handler, console_handler])
-        else:
-            logger = logging.getLogger(__name__)
-            logger.addHandler(file_handler)
-            logger.addHandler(console_handler)
-
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(log_level)
 
         config = configparser.ConfigParser()
 
@@ -157,7 +133,8 @@ class ProcessThread(Thread):
             self.report(70)
             path = os.path.join(temp_dir, stackFileDir)
             os.makedirs(path, exist_ok=True)
-            self.process_manager.genarate_steckup_info(path, self.process_manager.board.GetFileName(), project_name)
+            self.logger.info("genarate stackup info ")
+            self.process_manager.genarate_stackup_info(path, self.process_manager.board.GetFileName(), project_name)
 
             self.report(75)
             layers = {
@@ -260,4 +237,5 @@ class ProcessThread(Thread):
         self.report(-1)
 
     def report(self, status):
+        self.logger.info("progress " + str(status) + "%")
         wx.PostEvent(self.wx, StatusEvent(status))

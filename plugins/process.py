@@ -9,7 +9,6 @@ import shutil
 from collections import defaultdict
 import re
 import pandas as pd
-import logging
 
 # Interaction with KiCad.
 import pcbnew
@@ -29,38 +28,12 @@ term_regex = r"""(?mx)
 
 
 class ProcessManager:
-    def __init__(self):
+    def __init__(self, log):
+        self.logger = log
         self.board = pcbnew.GetBoard()
         self.bom = []
         self.components = []
         self.__rotation_db = self.__read_rotation_db()
-
-        # current_dir = os.path.dirname(__file__)
-        # os.path.join(current_dir, "app.log")
-        # self.file_log = open(os.path.join(current_dir, "app.log"), "w")
-        # self.file_log.write("hello world\n")
-
-        # log_level = logging.INFO
-        # LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-        # file_handler = logging.FileHandler(os.path.join(current_dir, "app.log"))
-        # # file_handler = logging.FileHandler("app.log")
-        # file_handler.setLevel(log_level)
-        # file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-
-        # console_handler = logging.StreamHandler()
-        # console_handler.setLevel(log_level)
-        # console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-
-        # if len(logging.getLogger().handlers) == 0:
-        #     logging.basicConfig(level=log_level, format=LOG_FORMAT, handlers=[file_handler, console_handler])
-        # else:
-        #     logger = logging.getLogger(__name__)
-        #     logger.addHandler(file_handler)
-        #     logger.addHandler(console_handler)
-
-        # self.logger = logging.getLogger(__name__)
-        # self.logger.setLevel(log_level)
 
     @staticmethod
     def __read_rotation_db(filename: str = os.path.join(os.path.dirname(__file__), "rotations.cf")) -> dict[str, float]:
@@ -361,15 +334,16 @@ class ProcessManager:
             data = f.read()
 
             sexp = self.parse_sexp(data.decode("utf-8"))
-            steckup = ""
+            stackup = ""
             for e in sexp:
                 if e[0] == "setup":
-                    steckup = e[1]
+                    stackup = e[1]
                     break
 
             count = 0
-            for layer in steckup:
-                if layer[0] == "layer":
+
+            for layer in stackup:
+                if isinstance(layer, list) and layer[0] == "layer":
                     count += 1
                     layer_dict = dict.fromkeys(keys)
                     layer_dict["Layer"] = count
@@ -398,15 +372,15 @@ class ProcessManager:
             pass
         return None
 
-    def genarate_steckup_info(self, temp_dir, board_file, project_name):
+    def genarate_stackup_info(self, temp_dir, board_file, project_name):
         name = os.path.join(temp_dir, project_name)
-        # path = os.path.join(temp_dir, name + '.csv')
-
-        steck = self.get_stackup_info(board_file)
+        stack = self.get_stackup_info(board_file)
+        if stack is None or len(stack) < 1:
+            raise RuntimeError("Configure the PCB stack.")
 
         writer = pd.ExcelWriter(name + ".xlsx")
         fmt = writer.book.add_format({"font_name": "Calibri", "font_size": "18"})
-        df1 = pd.DataFrame(steck)
+        df1 = pd.DataFrame(stack)
         df1.to_excel(
             writer,
             sheet_name="Stackup",
