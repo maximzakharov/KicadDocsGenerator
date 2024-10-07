@@ -45,15 +45,13 @@ class ProcessManager:
         with open(filename, "r") as fh:
             for line in fh:
                 line = line.rstrip()
-                # remove anything after a comment
-                line = re.sub("#.*$", "", line)
                 # remove all trailing space
-                line = re.sub("\s*$", "", line)
+                line = re.sub(r"\s*$", "", line)
 
                 if line == "":
                     continue
 
-                match = re.match("^([^\s]+)\s+(\d+)$", line)
+                match = re.match(r"^([^\s]+)\s+(\d+)$", line)
 
                 if match:
                     db.update({match.group(1): int(match.group(2))})
@@ -78,7 +76,7 @@ class ProcessManager:
         # Look for regular expression math of the footprint name and not its root library.
         fpshort = footprint.split(":")[-1]
 
-        for expression, delta in self.db.items():
+        for expression, delta in self.__rotation_db.items():
             fp = fpshort
 
             if re.search(":", expression):
@@ -401,7 +399,7 @@ class ProcessManager:
         temp_file = shutil.move(temp_file, temp_dir)
         return temp_file
 
-    def _get_lcsc_pn_from_footprint(self, footprint: str):
+    def _get_lcsc_pn_from_footprint(self, footprint):
         """'Get the MPN/LCSC stock code from standard symbol fields."""
         keys = ["LCSC_Part", "JLCPCB Part"]
         fallback_keys = ["LCSC", "JLC", "MPN", "Mpn", "mpn"]
@@ -412,34 +410,34 @@ class ProcessManager:
         for key in fallback_keys:
             return footprint.GetFieldText(key)
 
-    def _get_mfr_name_from_footprint(self, footprint: str):
+    def _get_mfr_name_from_footprint(self, footprint):
         keys = ["Mfr_Name"]
 
         for key in keys:
             return footprint.GetFieldText(key)
 
-    def _get_mfr_pn_from_footprint(self, footprint: str):
+    def _get_mfr_pn_from_footprint(self, footprint):
         """'Get the MPN/LCSC stock code from standard symbol fields."""
         keys = ["Mfr_Part_Number"]
 
         for key in keys:
             return footprint.GetFieldText(key)
 
-    def _get_link_from_footprint(self, footprint: str):
+    def _get_link_from_footprint(self, footprint):
         """'Get the MPN/LCSC stock code from standard symbol fields."""
         keys = ["Link"]
 
         for key in keys:
             return footprint.GetFieldText(key)
 
-    def _get_unit_price_from_footprint(self, footprint: str):
+    def _get_unit_price_from_footprint(self, footprint):
         """'Get the MPN/LCSC stock code from standard symbol fields."""
         keys = ["Unit price"]
 
         for key in keys:
             return footprint.GetFieldText(key)
 
-    def _get_rotation_offset_from_footprint(self, footprint: str) -> float:
+    def _get_rotation_offset_from_footprint(self, footprint) -> float:
         """Get the rotation from standard symbol fields."""
         keys = ["JLCPCB Rotation Offset"]
         fallback_keys = ["JlcRotOffset", "JLCRotOffset"]

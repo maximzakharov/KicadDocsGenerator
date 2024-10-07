@@ -6,9 +6,6 @@ class LoggerConfig:
     def __init__(self):
         self.name = "app.log"
 
-    def get_logger(self):
-        return self.logger
-
     def log(self, text, level):
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.name, 'a') as file:
