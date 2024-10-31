@@ -14,6 +14,7 @@ from datetime import datetime
 import subprocess
 import platform
 
+
 def bool_convert(text):
     return text == "True"
 
@@ -30,7 +31,9 @@ class ProcessThread(Thread):
 
         plot_config = None
 
-        config_file = os.path.join(os.path.dirname(self.process_manager.board.GetFileName()), "docs.config.ini")
+        config_file = os.path.join(
+            os.path.dirname(self.process_manager.board.GetFileName()), "docs.config.ini"
+        )
 
         plot_config = config.read(config_file)
 
@@ -46,7 +49,9 @@ class ProcessThread(Thread):
             except:
                 self.plot_scale = 1
             self.logger.info("Second plot_scale = " + str(self.plot_scale))
-            self.delete_single_page_files = bool_convert(config.get("main", "delete_single_page_files"))
+            self.delete_single_page_files = bool_convert(
+                config.get("main", "delete_single_page_files")
+            )
             self.del_temp_files = bool_convert(config.get("main", "del_temp_files"))
             self.create_svg = bool_convert(config.get("main", "create_svg"))
         else:
@@ -67,14 +72,18 @@ class ProcessThread(Thread):
         # initializing
         self.report(0)
 
-        temp_dir = os.path.join(os.path.dirname(self.process_manager.board.GetFileName()), "temp")
+        temp_dir = os.path.join(
+            os.path.dirname(self.process_manager.board.GetFileName()), "temp"
+        )
         temp_file = os.path.join(temp_dir, "tmp")
 
         project_path = self.process_manager.board.GetFileName()
         project_name = os.path.splitext(os.path.basename(project_path))[0]
         project_directory = os.path.dirname(self.process_manager.board.GetFileName())
         current_time = datetime.strftime(datetime.now(), "%d-%m-%Y")
-        version = self.process_manager.get_revision(self.process_manager.board.GetFileName())
+        version = self.process_manager.get_revision(
+            self.process_manager.board.GetFileName()
+        )
         if version is None:
             version = "0"
 
@@ -86,7 +95,10 @@ class ProcessThread(Thread):
                 shutil.rmtree(temp_dir)
             except:
                 wx.MessageBox(
-                    "del_temp_files failed\n\nOn dir " + temp_dir + "\n\n" + traceback.format_exc(),
+                    "del_temp_files failed\n\nOn dir "
+                    + temp_dir
+                    + "\n\n"
+                    + traceback.format_exc(),
                     "Error",
                     wx.OK | wx.ICON_ERROR,
                 )
@@ -96,7 +108,10 @@ class ProcessThread(Thread):
                 shutil.rmtree(output_path)
             except:
                 wx.MessageBox(
-                    "del_temp_files failed\n\nOn dir " + output_path + "\n\n" + traceback.format_exc(),
+                    "del_temp_files failed\n\nOn dir "
+                    + output_path
+                    + "\n\n"
+                    + traceback.format_exc(),
                     "Error",
                     wx.OK | wx.ICON_ERROR,
                 )
@@ -134,7 +149,9 @@ class ProcessThread(Thread):
             path = os.path.join(temp_dir, stackFileDir)
             os.makedirs(path, exist_ok=True)
             self.logger.info("genarate stackup info ")
-            self.process_manager.genarate_stackup_info(path, self.process_manager.board.GetFileName(), project_name)
+            self.process_manager.genarate_stackup_info(
+                path, self.process_manager.board.GetFileName(), project_name
+            )
 
             self.report(75)
             layers = {
@@ -207,8 +224,6 @@ class ProcessThread(Thread):
 
             self.report(90)
 
-            archive_file = self.process_manager.generate_archive(temp_dir, temp_file, project_name)
-
         except Exception as e:
             wx.MessageBox(str(e), "Error", wx.OK | wx.ICON_ERROR)
             self.report(-1)
@@ -229,7 +244,10 @@ class ProcessThread(Thread):
             shutil.rmtree(temp_dir)
         except:
             wx.MessageBox(
-                "del_temp_files failed\n\nOn dir " + temp_dir + "\n\n" + traceback.format_exc(),
+                "del_temp_files failed\n\nOn dir "
+                + temp_dir
+                + "\n\n"
+                + traceback.format_exc(),
                 "Error",
                 wx.OK | wx.ICON_ERROR,
             )
