@@ -1,12 +1,17 @@
 import os
 import wx
 import shutil
-import tempfile
 from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
-from .config import *
-import shutil
+from .config import (
+    gerberDir,
+    drillDir,
+    placementDir,
+    bomFileDir,
+    stackFileDir,
+    layersJob,
+)
 from . import plot
 import pcbnew
 import configparser
@@ -28,9 +33,7 @@ class ProcessThread(Thread):
         self.start()
 
         config = configparser.ConfigParser()
-
         plot_config = None
-
         config_file = os.path.join(
             os.path.dirname(self.process_manager.board.GetFileName()), "docs.config.ini"
         )
@@ -46,7 +49,10 @@ class ProcessThread(Thread):
             self.logger.info("plot_config SUCCESS " + str(plot_config))
             try:
                 self.plot_scale = float(config.get("main", "scale"))
-            except:
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to get plot_scale from config, using default value 1: %s", e
+                )
                 self.plot_scale = 1
             self.logger.info("Second plot_scale = " + str(self.plot_scale))
             self.delete_single_page_files = bool_convert(
@@ -68,6 +74,18 @@ class ProcessThread(Thread):
         else:
             raise NotImplementedError("Unsupported operating system")
 
+    @staticmethod
+    def delete_directory(directory_path):
+        if os.path.exists(directory_path):
+            try:
+                shutil.rmtree(directory_path)
+            except Exception as e:
+                print(f"Error deleting directory {directory_path}: {e}")
+                wx.MessageBox(
+                    f"Error deleting directory {directory_path}: {e}" "Error",
+                    wx.OK | wx.ICON_ERROR,
+                )
+
     def run(self):
         # initializing
         self.report(0)
@@ -75,7 +93,6 @@ class ProcessThread(Thread):
         temp_dir = os.path.join(
             os.path.dirname(self.process_manager.board.GetFileName()), "temp"
         )
-        temp_file = os.path.join(temp_dir, "tmp")
 
         project_path = self.process_manager.board.GetFileName()
         project_name = os.path.splitext(os.path.basename(project_path))[0]
@@ -90,31 +107,8 @@ class ProcessThread(Thread):
         outputFolder = "production_" + project_name + "_" + current_time + "_" + version
         output_path = os.path.join(project_directory, outputFolder)
 
-        if os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-            except:
-                wx.MessageBox(
-                    "del_temp_files failed\n\nOn dir "
-                    + temp_dir
-                    + "\n\n"
-                    + traceback.format_exc(),
-                    "Error",
-                    wx.OK | wx.ICON_ERROR,
-                )
-
-        if os.path.exists(output_path):
-            try:
-                shutil.rmtree(output_path)
-            except:
-                wx.MessageBox(
-                    "del_temp_files failed\n\nOn dir "
-                    + output_path
-                    + "\n\n"
-                    + traceback.format_exc(),
-                    "Error",
-                    wx.OK | wx.ICON_ERROR,
-                )
+        self.delete_directory(temp_dir)
+        self.delete_directory(output_path)
 
         try:
             # configure and generate gerber
@@ -143,7 +137,7 @@ class ProcessThread(Thread):
             self.report(60)
             path = os.path.join(temp_dir, bomFileDir)
             os.makedirs(path, exist_ok=True)
-            self.process_manager.generate_bom(path, project_name, wx)
+            self.process_manager.generate_bom(path, project_name)
 
             self.report(70)
             path = os.path.join(temp_dir, stackFileDir)
@@ -154,67 +148,14 @@ class ProcessThread(Thread):
             )
 
             self.report(75)
-            layers = {
-                "Top": {
-                    "mirrored": True,
-                    "tented": False,
-                    "enabled_layers": "Edge.Cuts,B.Fab,B.Paste,B.Silkscreen,User.9,User.1",
-                    "frame": "User.9",
-                    "layers": {
-                        "B.Cu": "#F0F0F0",
-                        "B.Paste": "#00CD66",
-                        "Edge.Cuts": "#575757",
-                        "B.Fab": "#000000",
-                        "B.Silkscreen": "#000000",
-                        "B.Courtyard": "#000000",
-                        "User.1": "#000000",
-                    },
-                    "layers_negative": {
-                        "B.Fab": "false",
-                        "B.Silkscreen": "false",
-                        "B.Paste": "false",
-                        "B.Courtyard": "false",
-                        "Edge.Cuts": "false",
-                        "User.1": "false",
-                        "B.Cu": "false",
-                    },
-                },
-                "Bottom": {
-                    "mirrored": False,
-                    "tented": False,
-                    "enabled_layers": "User.1,F.Fab,F.Paste,Edge.Cuts,F.Silkscreen,User.9",
-                    "frame": "User.9",
-                    "layers": {
-                        "F.Cu": "#F0F0F0",
-                        "F.Paste": "#00CD66",
-                        "Edge.Cuts": "#575757",
-                        "User.Eco1": "#000000",
-                        "F.Silkscreen": "#000000",
-                        "F.Fab": "#000000",
-                        "F.Courtyard": "#000000",
-                        "User.1": "#000000",
-                        "B.Silkscreen": "#000000",
-                    },
-                    "layers_negative": {
-                        "User.Eco1": "false",
-                        "Edge.Cuts": "false",
-                        "F.Silkscreen": "false",
-                        "F.Paste": "false",
-                        "F.Cu": "false",
-                        "F.Fab": "false",
-                        "F.Courtyard": "false",
-                        "User.1": "false",
-                        "B.Silkscreen": "false",
-                    },
-                },
-            }
-            enabled_templates = ["Bottom", "Top"]
+
+            enabled_templates = ["Top", "Bottom"]
             board = pcbnew.GetBoard()
 
             plot.plot_gerbers(
                 board,
                 temp_dir,
-                layers,
+                layersJob,
                 enabled_templates,
                 self.del_temp_files,
                 self.create_svg,
@@ -230,28 +171,15 @@ class ProcessThread(Thread):
             return
 
         try:
-            if os.path.exists(output_path):
-                shutil.rmtree(output_path)
-
             shutil.copytree(temp_dir, output_path)
             shutil.make_archive(outputFolder, "zip", output_path)
             self.open_folder(output_path)
 
         except Exception as e:
+            self.logger.error(f"Make archive failed {str(e)}")
             self.open_folder(temp_dir)
 
-        try:
-            shutil.rmtree(temp_dir)
-        except:
-            wx.MessageBox(
-                "del_temp_files failed\n\nOn dir "
-                + temp_dir
-                + "\n\n"
-                + traceback.format_exc(),
-                "Error",
-                wx.OK | wx.ICON_ERROR,
-            )
-
+        self.delete_directory(temp_dir)
         self.report(-1)
 
     def report(self, status):

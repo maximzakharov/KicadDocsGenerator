@@ -14,7 +14,7 @@ import pandas as pd
 import pcbnew
 
 # Application definitions.
-from .config import *
+from .config import plotPlan, placementFileName, netlistFileName
 import wx
 
 term_regex = r"""(?mx)
@@ -33,30 +33,6 @@ class ProcessManager:
         self.board = pcbnew.GetBoard()
         self.bom = []
         self.components = []
-        self.__rotation_db = self.__read_rotation_db()
-
-    @staticmethod
-    def __read_rotation_db(filename: str = os.path.join(os.path.dirname(__file__), "rotations.cf")) -> dict[str, float]:
-        """Read the rotations.cf config file so we know what rotations
-        to apply later.
-        """
-        db = {}
-
-        with open(filename, "r") as fh:
-            for line in fh:
-                line = line.rstrip()
-                # remove all trailing space
-                line = re.sub(r"\s*$", "", line)
-
-                if line == "":
-                    continue
-
-                match = re.match(r"^([^\s]+)\s+(\d+)$", line)
-
-                if match:
-                    db.update({match.group(1): int(match.group(2))})
-
-        return db
 
     def is_number(self, str):
         try:
@@ -70,22 +46,6 @@ class ProcessManager:
         if string and self.is_number(string):
             num = float(string)
         return num
-
-    def _get_rotation_from_db(self, footprint: str) -> float:
-        """Get the rotation to be added from the database file."""
-        # Look for regular expression math of the footprint name and not its root library.
-        fpshort = footprint.split(":")[-1]
-
-        for expression, delta in self.__rotation_db.items():
-            fp = fpshort
-
-            if re.search(":", expression):
-                fp = footprint
-
-            if re.search(expression, fp):
-                return delta
-
-        return 0.0
 
     def generate_gerber(self, temp_dir):
         """Generate the Gerber files."""
@@ -114,7 +74,9 @@ class ProcessManager:
         for layer_info in plotPlan:
             if self.board.IsLayerEnabled(layer_info[1]):
                 plot_controller.SetLayer(layer_info[1])
-                plot_controller.OpenPlotfile(layer_info[0], pcbnew.PLOT_FORMAT_GERBER, layer_info[2])
+                plot_controller.OpenPlotfile(
+                    layer_info[0], pcbnew.PLOT_FORMAT_GERBER, layer_info[2]
+                )
                 plot_controller.PlotLayer()
 
         plot_controller.ClosePlot()
@@ -123,7 +85,9 @@ class ProcessManager:
         """Generate the drill file."""
         drill_writer = pcbnew.EXCELLON_WRITER(self.board)
 
-        drill_writer.SetOptions(False, True, self.board.GetDesignSettings().GetAuxOrigin(), True)
+        drill_writer.SetOptions(
+            False, True, self.board.GetDesignSettings().GetAuxOrigin(), True
+        )
         drill_writer.SetFormat(True)
         drill_writer.CreateDrillandMapFilesSet(temp_dir, True, False)
 
@@ -178,10 +142,20 @@ class ProcessManager:
                     unique_id = str(footprint_designators[footprint.GetReference()])
                     footprint_designators[footprint.GetReference()] -= 1
 
-                designator = "{}{}{}".format(footprint.GetReference(), "" if unique_id == "" else "_", unique_id)
-                mid_x = (footprint.GetPosition()[0] - self.board.GetDesignSettings().GetAuxOrigin()[0]) / 1000000.0
+                designator = "{}{}{}".format(
+                    footprint.GetReference(), "" if unique_id == "" else "_", unique_id
+                )
+                mid_x = (
+                    footprint.GetPosition()[0]
+                    - self.board.GetDesignSettings().GetAuxOrigin()[0]
+                ) / 1000000.0
                 mid_y = (
-                    (footprint.GetPosition()[1] - self.board.GetDesignSettings().GetAuxOrigin()[1]) * -1.0 / 1000000.0
+                    (
+                        footprint.GetPosition()[1]
+                        - self.board.GetDesignSettings().GetAuxOrigin()[1]
+                    )
+                    * -1.0
+                    / 1000000.0
                 )
                 rotation = (
                     footprint.GetOrientation().AsDegrees()
@@ -199,7 +173,10 @@ class ProcessManager:
                 pos_offset = self._get_position_offset_from_footprint(footprint)
                 rsin = math.sin(rotation / 180 * math.pi)
                 rcos = math.cos(rotation / 180 * math.pi)
-                pos_offset = (pos_offset[0] * rcos - pos_offset[1] * rsin, pos_offset[0] * rsin + pos_offset[1] * rcos)
+                pos_offset = (
+                    pos_offset[0] * rcos - pos_offset[1] * rsin,
+                    pos_offset[0] * rsin + pos_offset[1] * rcos,
+                )
                 mid_x, mid_y = tuple(map(sum, zip((mid_x, mid_y), pos_offset)))
 
                 self.components.append(
@@ -222,12 +199,18 @@ class ProcessManager:
                 # merge similar parts into single entry
                 insert = True
                 for component in self.bom:
-                    if component["Mfr_Part_Number"] == self._get_mfr_pn_from_footprint(footprint):
+                    if component["Mfr_Part_Number"] == self._get_mfr_pn_from_footprint(
+                        footprint
+                    ):
                         component["Designator"] += ", " + "{}{}{}".format(
-                            footprint.GetReference(), "" if unique_id == "" else "_", unique_id
+                            footprint.GetReference(),
+                            "" if unique_id == "" else "_",
+                            unique_id,
                         )
                         component["Quantity"] += 1
-                        component["Total price"] += self.to_float(component["Unit price"])
+                        component["Total price"] += self.to_float(
+                            component["Unit price"]
+                        )
                         insert = False
 
                 # add component to BOM
@@ -235,23 +218,36 @@ class ProcessManager:
                     self.bom.append(
                         {
                             "Designator": "{}{}{}".format(
-                                footprint.GetReference(), "" if unique_id == "" else "_", unique_id
+                                footprint.GetReference(),
+                                "" if unique_id == "" else "_",
+                                unique_id,
                             ),
                             "Footprint": self._normalize_footprint_name(footprint_name),
                             "Value": footprint.GetValue(),
                             # 'Mount': mount_type,
-                            "Mfr_Part_Number": self._get_mfr_pn_from_footprint(footprint),
+                            "Mfr_Part_Number": self._get_mfr_pn_from_footprint(
+                                footprint
+                            ),
                             "Mfr_Name": self._get_mfr_name_from_footprint(footprint),
                             "Quantity": 1,
                             "LCSC_Part": self._get_lcsc_pn_from_footprint(footprint),
                             "Link": self._get_link_from_footprint(footprint),
-                            "Unit price": self._get_unit_price_from_footprint(footprint),
-                            "Total price": self.to_float(self._get_unit_price_from_footprint(footprint)),
+                            "Unit price": self._get_unit_price_from_footprint(
+                                footprint
+                            ),
+                            "Total price": self.to_float(
+                                self._get_unit_price_from_footprint(footprint)
+                            ),
                         }
                     )
 
         if len(self.components) > 0:
-            with open((os.path.join(temp_dir, placementFileName)), "w", newline="", encoding="utf-8") as outfile:
+            with open(
+                (os.path.join(temp_dir, placementFileName)),
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as outfile:
                 csv_writer = csv.writer(outfile)
                 # writing headers of CSV file
                 csv_writer.writerow(self.components[0].keys())
@@ -261,7 +257,7 @@ class ProcessManager:
                     if "**" not in component["Designator"]:
                         csv_writer.writerow(component.values())
 
-    def generate_bom(self, temp_dir, project_name, wx):
+    def generate_bom(self, temp_dir, project_name):
         name = os.path.join(temp_dir, "Bill of Materials-" + project_name)
         bom_path = os.path.join(temp_dir, name + ".csv")
 
@@ -273,7 +269,6 @@ class ProcessManager:
 
                 # Output all of the component information
                 for component in self.bom:
-                    # wx.MessageBox(component, "OK", wx.OK)
                     # writing data of CSV file
                     if "**" not in component["Designator"]:
                         csv_writer.writerow(component.values())
@@ -282,7 +277,9 @@ class ProcessManager:
             read_file = pd.read_csv(bom_path)
             read_file.to_excel(writer, sheet_name="BOM", index=False, na_rep="NaN")
             for column in read_file:
-                column_width = max(read_file[column].astype(str).map(len).max(), len(column))
+                column_width = max(
+                    read_file[column].astype(str).map(len).max(), len(column)
+                )
                 col_idx = read_file.columns.get_loc(column)
                 writer.sheets["BOM"].set_column(col_idx, col_idx, column_width)
 
@@ -366,8 +363,8 @@ class ProcessManager:
                     if match:
                         version = match.group(1)
                         return version
-        except:
-            pass
+        except Exception as e:
+            self.logger.error(str(e))
         return None
 
     def genarate_stackup_info(self, temp_dir, board_file, project_name):
@@ -389,7 +386,9 @@ class ProcessManager:
         for column in df1:
             column_width = max(df1[column].astype(str).map(len).max(), len(column))
             col_idx = df1.columns.get_loc(column)
-            writer.sheets["Stackup"].set_column(col_idx, col_idx, column_width * 1.5, fmt)
+            writer.sheets["Stackup"].set_column(
+                col_idx, col_idx, column_width * 1.5, fmt
+            )
 
         writer.close()
 
@@ -448,8 +447,8 @@ class ProcessManager:
             for key in keys + fallback_keys:
                 offset = footprint.GetFieldText(key)
                 break
-        except:
-            pass
+        except Exception as e:
+            self.logger.error(str(e))
 
         if offset is None or offset == "":
             return 0
@@ -457,7 +456,11 @@ class ProcessManager:
             try:
                 return float(offset)
             except ValueError:
-                raise RuntimeError("Rotation offset of {} is not a valid number".format(footprint.GetReference()))
+                raise RuntimeError(
+                    "Rotation offset of {} is not a valid number".format(
+                        footprint.GetReference()
+                    )
+                )
 
     def _get_position_offset_from_footprint(self, footprint):
         keys = ["JLCPCB Position Offset"]
@@ -469,8 +472,8 @@ class ProcessManager:
             for key in keys + fallback_keys:
                 offset = footprint.GetFieldText(key)
                 break
-        except:
-            pass
+        except Exception as e:
+            self.logger.error(str(e))
 
         if offset is None or offset == "":
             return (0, 0)
@@ -479,11 +482,12 @@ class ProcessManager:
                 return (float(offset.split(",")[0]), float(offset.split(",")[1]))
             except ValueError:
                 raise RuntimeError(
-                    "Position offset of {} is not a valid pair of numbers".format(footprint.GetReference())
+                    "Position offset of {} is not a valid pair of numbers".format(
+                        footprint.GetReference()
+                    )
                 )
 
     def _normalize_footprint_name(self, footprint):
         # replace footprint names of resistors, capacitors, inductors, diodes, LEDs, fuses etc, with the footprint size only
         pattern = re.compile(r"^(\w*_SMD:)?\w{1,4}_(\d+)_\d+Metric.*$")
-
         return pattern.sub(r"\2", footprint)
