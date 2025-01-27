@@ -4,7 +4,7 @@ from datetime import datetime
 
 class LoggerConfig:
     def __init__(self):
-        self.name = "app.log"
+        self.name = "kicad_app.log"
 
     def log(self, text, level):
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

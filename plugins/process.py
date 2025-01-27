@@ -214,31 +214,47 @@ class ProcessManager:
                         insert = False
 
                 # add component to BOM
-                if insert:
-                    self.bom.append(
-                        {
-                            "Designator": "{}{}{}".format(
-                                footprint.GetReference(),
-                                "" if unique_id == "" else "_",
-                                unique_id,
-                            ),
-                            "Footprint": self._normalize_footprint_name(footprint_name),
-                            "Value": footprint.GetValue(),
-                            # 'Mount': mount_type,
-                            "Mfr_Part_Number": self._get_mfr_pn_from_footprint(
-                                footprint
-                            ),
-                            "Mfr_Name": self._get_mfr_name_from_footprint(footprint),
-                            "Quantity": 1,
-                            "LCSC_Part": self._get_lcsc_pn_from_footprint(footprint),
-                            "Link": self._get_link_from_footprint(footprint),
-                            "Unit price": self._get_unit_price_from_footprint(
-                                footprint
-                            ),
-                            "Total price": self.to_float(
-                                self._get_unit_price_from_footprint(footprint)
-                            ),
-                        }
+                try:
+                    if insert:
+                        self.bom.append(
+                            {
+                                "Designator": "{}{}{}".format(
+                                    footprint.GetReference(),
+                                    "" if unique_id == "" else "_",
+                                    unique_id,
+                                ),
+                                "Footprint": self._normalize_footprint_name(
+                                    footprint_name
+                                ),
+                                "Value": footprint.GetValue(),
+                                # 'Mount': mount_type,
+                                "Mfr_Part_Number": self._get_mfr_pn_from_footprint(
+                                    footprint
+                                ),
+                                "Mfr_Name": self._get_mfr_name_from_footprint(
+                                    footprint
+                                ),
+                                "Quantity": 1,
+                                "LCSC_Part": self._get_lcsc_pn_from_footprint(
+                                    footprint
+                                ),
+                                "Link": self._get_link_from_footprint(footprint),
+                                "Unit price": self._get_unit_price_from_footprint(
+                                    footprint
+                                ),
+                                "Total price": self.to_float(
+                                    self._get_unit_price_from_footprint(footprint)
+                                ),
+                            }
+                        )
+                except Exception as e:
+                    self.logger.error(
+                        f"footprint - {footprint.GetReference()} {str(e)}"
+                    )
+                    wx.MessageBox(
+                        f"footprint - {footprint.GetReference()} {str(e)}",
+                        "Error",
+                        wx.OK | wx.ICON_ERROR,
                     )
 
         if len(self.components) > 0:
