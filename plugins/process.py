@@ -271,7 +271,17 @@ class ProcessManager:
                 for component in self.components:
                     # writing data of CSV file
                     if "**" not in component["Designator"]:
-                        csv_writer.writerow(component.values())
+                        # Check if component's designator exists in any of the BOM designator strings
+                        found = False
+                        for bom_item in self.bom:
+                            if component["Designator"] in bom_item["Designator"].split(
+                                ", "
+                            ):
+                                found = True
+                                break
+
+                        if found:
+                            csv_writer.writerow(component.values())
 
     def generate_bom(self, temp_dir, project_name):
         name = os.path.join(temp_dir, "Bill of Materials-" + project_name)
