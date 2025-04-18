@@ -1,4 +1,7 @@
 # KicadDocsGenerator
+
+[![CI](https://github.com/maximzakharov/KicadDocsGenerator/actions/workflows/release.yml/badge.svg)](https://github.com/maximzakharov/KicadDocsGenerator/actions/workflows/release.yml)
+
 This repository contains a plugin for KiCad that automates the creation of all necessary documentation for PCB manufacturing
 
 ## Installation
