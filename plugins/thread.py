@@ -1,23 +1,26 @@
+import configparser
+import logging
 import os
-import wx
+import platform
 import shutil
+import subprocess
+from datetime import datetime
 from threading import Thread
+
+import pcbnew
+import wx
+
+from . import plot
+from .config import (
+    bomFileDir,
+    drillDir,
+    gerberDir,
+    layersJob,
+    placementDir,
+    stackFileDir,
+)
 from .events import StatusEvent
 from .process import ProcessManager
-from .config import (
-    gerberDir,
-    drillDir,
-    placementDir,
-    bomFileDir,
-    stackFileDir,
-    layersJob,
-)
-from . import plot
-import pcbnew
-import configparser
-from datetime import datetime
-import subprocess
-import platform
 
 
 def bool_convert(text):
@@ -25,10 +28,9 @@ def bool_convert(text):
 
 
 class ProcessThread(Thread):
-    def __init__(self, wx, logs):
-        self.logger = logs
+    def __init__(self, wx):
         Thread.__init__(self)
-        self.process_manager = ProcessManager(self.logger)
+        self.process_manager = ProcessManager()
         self.wx = wx
         self.start()
 
@@ -46,22 +48,22 @@ class ProcessThread(Thread):
         self.create_svg = False
 
         if plot_config:
-            self.logger.info("plot_config SUCCESS " + str(plot_config))
+            logging.info("plot_config SUCCESS " + str(plot_config))
             try:
                 self.plot_scale = float(config.get("main", "scale"))
             except Exception as e:
-                self.logger.warning(
+                logging.warning(
                     "Failed to get plot_scale from config, using default value 1: %s", e
                 )
                 self.plot_scale = 1
-            self.logger.info("Second plot_scale = " + str(self.plot_scale))
+            logging.info("Second plot_scale = " + str(self.plot_scale))
             self.delete_single_page_files = bool_convert(
                 config.get("main", "delete_single_page_files")
             )
             self.del_temp_files = bool_convert(config.get("main", "del_temp_files"))
             self.create_svg = bool_convert(config.get("main", "create_svg"))
         else:
-            self.logger.info("plot_config FAILED " + str(plot_config))
+            logging.info("plot_config FAILED " + str(plot_config))
 
     def open_folder(self, path):
         system_name = platform.system()
@@ -80,9 +82,9 @@ class ProcessThread(Thread):
             try:
                 shutil.rmtree(directory_path)
             except Exception as e:
-                print(f"Error deleting directory {directory_path}: {e}")
+                logging.error(f"Error deleting directory {directory_path}: {e}")
                 wx.MessageBox(
-                    f"Error deleting directory {directory_path}: {e}" "Error",
+                    f"Error deleting directory {directory_path}: {e}Error",
                     wx.OK | wx.ICON_ERROR,
                 )
 
@@ -142,7 +144,7 @@ class ProcessThread(Thread):
             self.report(70)
             path = os.path.join(temp_dir, stackFileDir)
             os.makedirs(path, exist_ok=True)
-            self.logger.info("genarate stackup info ")
+            logging.info("generate stackup info ")
             self.process_manager.genarate_stackup_info(
                 path, self.process_manager.board.GetFileName(), project_name
             )
@@ -166,8 +168,9 @@ class ProcessThread(Thread):
             self.report(90)
 
         except Exception as e:
-            wx.MessageBox(str(e), "Error", wx.OK | wx.ICON_ERROR)
+            logging.error(f"{e}")
             self.report(-1)
+            wx.MessageBox(str(e), "Error", wx.OK | wx.ICON_ERROR)
             return
 
         try:
@@ -176,12 +179,12 @@ class ProcessThread(Thread):
             self.open_folder(output_path)
 
         except Exception as e:
-            self.logger.error(f"Make archive failed {str(e)}")
+            logging.error(f"Make archive failed {str(e)}")
             self.open_folder(temp_dir)
 
         self.delete_directory(temp_dir)
         self.report(-1)
 
     def report(self, status):
-        self.logger.info("progress " + str(status) + "%")
+        logging.info(f"progress {status}%")
         wx.PostEvent(self.wx, StatusEvent(status))

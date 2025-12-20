@@ -1,21 +1,24 @@
 # For better annotation.
 from __future__ import annotations
 
+import csv
+import logging
+import math
+
 # System base libraries
 import os
-import csv
-import math
+import re
 import shutil
 from collections import defaultdict
-import re
+
 import pandas as pd
 
 # Interaction with KiCad.
 import pcbnew
+import wx
 
 # Application definitions.
-from .config import plotPlan, placementFileName, netlistFileName
-import wx
+from .config import netlistFileName, placementFileName, plotPlan
 
 term_regex = r"""(?mx)
     \s*(?:
@@ -28,8 +31,7 @@ term_regex = r"""(?mx)
 
 
 class ProcessManager:
-    def __init__(self, log):
-        self.logger = log
+    def __init__(self):
         self.board = pcbnew.GetBoard()
         self.bom = []
         self.components = []
@@ -49,6 +51,7 @@ class ProcessManager:
 
     def generate_gerber(self, temp_dir):
         """Generate the Gerber files."""
+        logging.info("Starting Gerber generation...")
         settings = self.board.GetDesignSettings()
         settings.m_SolderMaskMargin = 0
         settings.m_SolderMaskMinWidth = 0
@@ -80,9 +83,11 @@ class ProcessManager:
                 plot_controller.PlotLayer()
 
         plot_controller.ClosePlot()
+        logging.info("Gerber generation completed.")
 
     def generate_drills(self, temp_dir):
         """Generate the drill file."""
+        logging.info("Starting drill file generation...")
         drill_writer = pcbnew.EXCELLON_WRITER(self.board)
 
         drill_writer.SetOptions(
@@ -90,14 +95,18 @@ class ProcessManager:
         )
         drill_writer.SetFormat(True)
         drill_writer.CreateDrillandMapFilesSet(temp_dir, True, False)
+        logging.info("Drill file generation completed.")
 
     def generate_netlist(self, temp_dir):
         """Generate the connection netlist."""
+        logging.info("Starting netlist generation...")
         netlist_writer = pcbnew.IPC356D_WRITER(self.board)
         netlist_writer.Write(os.path.join(temp_dir, netlistFileName))
+        logging.info("Netlist generation completed.")
 
     def generate_positions(self, temp_dir):
         """Generate the position files."""
+        logging.info("Starting position file generation...")
         if hasattr(self.board, "GetModules"):
             footprints = list(self.board.GetModules())
         else:
@@ -248,9 +257,7 @@ class ProcessManager:
                             }
                         )
                 except Exception as e:
-                    self.logger.error(
-                        f"footprint - {footprint.GetReference()} {str(e)}"
-                    )
+                    logging.error(f"footprint - {footprint.GetReference()} {str(e)}")
                     wx.MessageBox(
                         f"footprint - {footprint.GetReference()} {str(e)}",
                         "Error",
@@ -282,8 +289,10 @@ class ProcessManager:
 
                         if found:
                             csv_writer.writerow(component.values())
+            logging.info("Position file generation completed.")
 
     def generate_bom(self, temp_dir, project_name):
+        logging.info("Starting BOM generation...")
         name = os.path.join(temp_dir, "Bill of Materials-" + project_name)
         bom_path = os.path.join(temp_dir, name + ".csv")
 
@@ -307,9 +316,34 @@ class ProcessManager:
                     read_file[column].astype(str).map(len).max(), len(column)
                 )
                 col_idx = read_file.columns.get_loc(column)
-                writer.sheets["BOM"].set_column(col_idx, col_idx, column_width)
+                try:
+                    # Добавляем отладочный вывод для понимания структуры writer
+                    logging.info(f"writer type: {type(writer)}")
+                    logging.info(f"writer object: {writer}")
+                    logging.info(f"writer.sheets type: {type(writer.sheets)}")
+                    logging.info(f"writer.sheets content: {writer.sheets}")
+                    logging.info(f"Available sheets: {list(writer.sheets.keys())}")
+                    logging.info(f"Column: {column}, col_idx: {col_idx}, column_width: {column_width}")
+
+                    sheet = writer.sheets["BOM"]
+                    logging.info(f"Sheet type: {type(sheet)}")
+                    logging.info(f"Sheet object: {sheet}")
+
+                    sheet.set_column(col_idx, col_idx, column_width)
+                    logging.info(f"Successfully set column width for column {column}")
+                except Exception as e:
+                    logging.error(
+                        f"Failed to set column width for column {column}: {str(e)}"
+                    )
+                    logging.error(f"writer type: {type(writer)}")
+                    logging.error(f"writer object: {writer}")
+                    logging.error(f"writer.sheets type: {type(writer.sheets)}")
+                    logging.error(f"writer.sheets content: {writer.sheets}")
+                    logging.error(f"Available sheets: {list(writer.sheets.keys())}")
+                    raise Exception(e)
 
             writer.close()
+        logging.info("BOM generation completed.")
 
     def parse_sexp(self, sexp):
         # index = sexp.find("stackup", 0)
@@ -382,6 +416,7 @@ class ProcessManager:
         return layers
 
     def get_revision(self, board_file):
+        logging.debug("Getting revision from board file: " + board_file)
         try:
             with open(board_file, "r") as file:
                 for line in file:
@@ -390,10 +425,11 @@ class ProcessManager:
                         version = match.group(1)
                         return version
         except Exception as e:
-            self.logger.error(str(e))
+            logging.error(str(e))
         return None
 
     def genarate_stackup_info(self, temp_dir, board_file, project_name):
+        logging.info("Generating stackup info...")
         name = os.path.join(temp_dir, project_name)
         stack = self.get_stackup_info(board_file)
         if stack is None or len(stack) < 1:
@@ -412,16 +448,25 @@ class ProcessManager:
         for column in df1:
             column_width = max(df1[column].astype(str).map(len).max(), len(column))
             col_idx = df1.columns.get_loc(column)
-            writer.sheets["Stackup"].set_column(
-                col_idx, col_idx, column_width * 1.5, fmt
-            )
+            try:
+                writer.sheets["Stackup"].set_column(
+                    col_idx, col_idx, column_width * 1.5, fmt
+                )
+            except Exception as e:
+                logging.error(
+                    f"Failed to set column width for column {column}: {str(e)}"
+                )
+                raise Exception(e)
 
         writer.close()
+        logging.info("Stackup info generation completed.")
 
     def generate_archive(self, temp_dir, temp_file, project_name):
         """Generate the files."""
+        logging.info("Generating archive...")
         temp_file = shutil.make_archive(project_name, "zip", temp_dir)
         temp_file = shutil.move(temp_file, temp_dir)
+        logging.info("Archive generation completed.")
         return temp_file
 
     def _get_lcsc_pn_from_footprint(self, footprint):
@@ -474,7 +519,7 @@ class ProcessManager:
                 offset = footprint.GetFieldText(key)
                 break
         except Exception as e:
-            self.logger.error(str(e))
+            logging.error(str(e))
 
         if offset is None or offset == "":
             return 0
@@ -499,7 +544,7 @@ class ProcessManager:
                 offset = footprint.GetFieldText(key)
                 break
         except Exception as e:
-            self.logger.error(str(e))
+            logging.error(str(e))
 
         if offset is None or offset == "":
             return (0, 0)

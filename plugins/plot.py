@@ -1,9 +1,11 @@
+import logging
 import os
+import re
 import shutil
+import traceback
+
 import pcbnew
 import wx
-import re
-import traceback
 
 try:
     import fitz  # This imports PyMuPDF
@@ -21,6 +23,7 @@ def hex_to_rgb(value):
 
 
 def colorize_pdf(folder, inputFile, outputFile, color):
+    logging.info(f"Colorizing PDF: {inputFile} -> {outputFile}")
     try:
         with fitz.open(os.path.join(folder, inputFile)) as doc:
             xref_number = doc[0].get_contents()
@@ -36,19 +39,15 @@ def colorize_pdf(folder, inputFile, outputFile, color):
             doc.save(os.path.join(folder, outputFile), clean=True)
 
     except Exception as e:
-        wx.MessageBox(
-            "colorize_pdf failed\nOn input file "
-            + inputFile
-            + " in "
-            + folder
-            + "\n\n"
-            + str(e),
-            "Error",
-            wx.OK | wx.ICON_ERROR,
+        error_msg = (
+            f"colorize_pdf failed\nOn input file {inputFile} in {folder}\n\n{str(e)}"
         )
+        wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
+        logging.error(error_msg)
 
 
 def merge_pdf(input_folder, input_files, output_folder, output_file):
+    logging.info(f"Merging PDFs: {len(input_files)} files to {output_file}")
     try:
         output = fitz.open()
         i = 0
@@ -67,33 +66,20 @@ def merge_pdf(input_folder, input_files, output_folder, output_file):
                         )
                 i = i + 1
             except Exception as e:
-                wx.MessageBox(
-                    "merge_pdf failed\n\nOn input file "
-                    + filename
-                    + " in "
-                    + input_folder
-                    + "\n\n"
-                    + str(e),
-                    "Error",
-                    wx.OK | wx.ICON_ERROR,
-                )
+                error_msg = f"merge_pdf failed\n\nOn input file {filename} in {input_folder}\n\n{str(e)}"
+                wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
+                logging.error(error_msg)
 
         output.save(os.path.join(output_folder, output_file))
 
     except Exception as e:
-        wx.MessageBox(
-            "merge_pdf failed\n\nOn output file "
-            + output_file
-            + " in "
-            + output_folder
-            + "\n\n"
-            + str(e),
-            "Error",
-            wx.OK | wx.ICON_ERROR,
-        )
+        error_msg = f"merge_pdf failed\n\nOn output file {output_file} in {output_folder}\n\n{str(e)}"
+        logging.error(error_msg)
+        wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
 
 
 def create_pdf_from_pages(input_folder, input_files, output_folder, output_file):
+    logging.info(f"Creating PDF from pages: {len(input_files)} pages to {output_file}")
     try:
         output = fitz.open()
         for filename in input_files:
@@ -102,16 +88,9 @@ def create_pdf_from_pages(input_folder, input_files, output_folder, output_file)
         output.save(os.path.join(output_folder, output_file))
 
     except Exception as e:
-        wx.MessageBox(
-            "create_pdf_from_pages failed\n\nOn output file "
-            + output_file
-            + " in "
-            + output_folder
-            + "\n\n"
-            + str(e),
-            "Error",
-            wx.OK | wx.ICON_ERROR,
-        )
+        error_msg = f"create_pdf_from_pages failed\n\nOn output file {output_file} in {output_folder}\n\n{str(e)}"
+        logging.error(error_msg)
+        wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
 
 
 def is_number(str):
@@ -132,6 +111,7 @@ def plot_gerbers(
     scale,
     del_single_page_files,
 ):
+    logging.info("Starting Gerber plotting process...")
     scale_gerber = 1.0
     if is_number(scale):
         scale_gerber = float(scale)
@@ -139,11 +119,12 @@ def plot_gerbers(
     try:
         fitz.open()
     except Exception as e:
-        wx.MessageBox(
-            "PyMuPdf wasn't loaded.\n\nRun 'sudo apt install python3-fitz' " + str(e),
-            "Error",
-            wx.OK | wx.ICON_ERROR,
+        error_msg = (
+            f"PyMuPdf wasn't loaded.\n\nRun 'sudo apt install python3-fitz' {str(e)}"
         )
+        logging.error(error_msg)
+        wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
+
         return
 
     os.chdir(os.path.dirname(board.GetFileName()))
@@ -183,15 +164,9 @@ def plot_gerbers(
         # os.access(os.path.join(output_dir, final_assembly_file), os.W_OK)
         open(os.path.join(output_dir, final_assembly_file), "w")
     except Exception as e:
-        wx.MessageBox(
-            "The output file is not writeable. Perhaps it's open in another "
-            + "application?\n\n"
-            + final_assembly_file_with_path
-            + " "
-            + str(e),
-            "Error",
-            wx.OK | wx.ICON_ERROR,
-        )
+        error_msg = f"The output file is not writable. Perhaps it's open in another application?\n\n{final_assembly_file_with_path} {str(e)}"
+        logging.error(error_msg)
+        wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
         progress = 100
         return
 
@@ -295,12 +270,9 @@ def plot_gerbers(
                             pcbnew.DRILL_MARKS_NO_DRILL_SHAPE
                         )
                 except Exception as e:
-                    wx.MessageBox(
-                        "Unable to set Drill Marks type.\n\nIf you're using a V6.99 build from before Dec 07 2022 then update to a newer build.\n\n"
-                        + str(e),
-                        "Error",
-                        wx.OK | wx.ICON_ERROR,
-                    )
+                    error_msg = f"Unable to set Drill Marks type.\n\nIf you're using a V6.99 build from before Dec 07 2022 then update to a newer build.\n\n{str(e)}"
+                    logging.error(error_msg)
+                    wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
                     return
 
             try:
@@ -310,20 +282,22 @@ def plot_gerbers(
                 plot_options.SetPlotFrameRef(layer_info[3])
                 plot_options.SetNegative(layer_info[4])
                 plot_options.SetMirror(template[1])
-                plot_options.SetPlotViaOnMaskLayer(template[2])
                 plot_controller.SetLayer(layer_info[1])
                 plot_controller.OpenPlotfile(
                     layer_info[0], pcbnew.PLOT_FORMAT_PDF, template_name
                 )
                 plot_controller.PlotLayer()
             except Exception as e:
-                wx.MessageBox(str(e), "Error", wx.OK | wx.ICON_ERROR)
+                error_msg = str(e)
+                logging.error(error_msg)
+                wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
                 return
 
         plot_controller.ClosePlot()
 
         filelist = []
         # Change color of pdf files
+        logging.info("Applying colors to PDF layers...")
         for layer_info in template[3]:
             ln = layer_info[0].replace(".", "_")
             inputFile = base_filename + "-" + ln + ".pdf"
@@ -335,17 +309,20 @@ def plot_gerbers(
                 filelist.append(inputFile)
 
         # Merge pdf files
+        logging.info(f"Merging PDF files for template: {template[0]}")
         assembly_file = base_filename + "_" + template[0] + ".pdf"
         merge_pdf(temp_dir, filelist, output_dir, assembly_file)
         template_filelist.append(assembly_file)
 
     # Add all generated pdfs to one file
+    logging.info("Creating final combined PDF...")
     create_pdf_from_pages(
         output_dir, template_filelist, output_dir, final_assembly_file
     )
 
     # Create SVG(s) if settings says so
     if create_svg:
+        logging.info("Creating SVG files from PDFs...")
         for template_file in template_filelist:
             template_pdf = fitz.open(os.path.join(output_dir, template_file))
             try:
@@ -355,28 +332,26 @@ def plot_gerbers(
                 file.write(svg_image)
                 file.close()
             except Exception as e:
-                wx.MessageBox(
-                    "Failed to create SVG in " + output_dir + "\n\n" + str(e),
-                    "Error",
-                    wx.OK | wx.ICON_ERROR,
-                )
-                progress = 100
-                setProgress(progress)
+                error_msg = f"Failed to create SVG in {output_dir}\n\n{str(e)}"
+                wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
+                logging.error(error_msg)
+                # progress = 100
+                # setProgress(progress)  # Commenting out undefined function
             template_pdf.close()
 
     # Delete temp files if setting says so
     if del_temp_files:
+        logging.info("Deleting temporary files...")
         try:
             shutil.rmtree(temp_dir)
         except Exception as e:
-            wx.MessageBox(
-                "del_temp_files failed\n\nOn dir " + temp_dir + "\n\n" + str(e),
-                "Error",
-                wx.OK | wx.ICON_ERROR,
-            )
+            error_msg = f"del_temp_files failed\n\nOn dir {temp_dir}\n\n{str(e)}"
+            logging.error(error_msg)
+            wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
 
     # Delete single page files if setting says so
     if del_single_page_files:
+        logging.info("Deleting single page PDF files...")
         for template_file in template_filelist:
             delete_file = os.path.join(
                 output_dir, os.path.splitext(template_file)[0] + ".pdf"
@@ -384,18 +359,16 @@ def plot_gerbers(
             try:
                 os.remove(delete_file)
             except Exception as e:
-                wx.MessageBox(
-                    "del_single_page_files failed\n\nOn file "
-                    + delete_file
-                    + "\n\n"
-                    + str(e),
-                    "Error",
-                    wx.OK | wx.ICON_ERROR,
+                error_msg = (
+                    f"del_single_page_files failed\n\nOn file {delete_file}\n\n{str(e)}"
                 )
+                logging.error(error_msg)
+                wx.MessageBox(error_msg, "Error", wx.OK | wx.ICON_ERROR)
 
     endmsg = "All done!\n\nAssembly pdf created: " + os.path.abspath(
         os.path.join(output_dir, final_assembly_file)
     )
+    logging.info("Gerber plotting process completed successfully!")
     if not del_single_page_files:
         endmsg = endmsg + "\n\nSingle page pdf files created:"
         for template_file in template_filelist:
