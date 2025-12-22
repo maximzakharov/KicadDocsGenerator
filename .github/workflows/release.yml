@@ -11,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
@@ -25,31 +25,41 @@ jobs:
 
       - name: Update version in metadata.json
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${GITHUB_REF#refs/tags/}
           jq --arg version "$VERSION" '.versions[0].version = $version' metadata.json > tmp.json && mv tmp.json metadata.json
 
       - name: Archive repository
         run: |
-          zip -r release.zip . --exclude ./.git/**\*
+          zip -r KicadDocsGenerator-${{ steps.extract_version.outputs.version }}.zip . --exclude ./.git/**\*
+
+      - name: Extract version from tag
+        id: extract_version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: ${{ steps.get_tag_description.outputs.description }}
-          draft: false
-          prerelease: false
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ steps.extract_version.outputs.version }}',
+              name: '${{ steps.extract_version.outputs.version }}',
+              body: 'Automatic release for version ${{ steps.extract_version.outputs.version }}',
+              draft: false,
+              prerelease: false
+            });
+            core.setOutput('upload_url', data.upload_url);
 
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v2
         env:
           GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release.zip
-          asset_name: release.zip
+          asset_path: ./KicadDocsGenerator-${{ steps.extract_version.outputs.version }}.zip
+          asset_name: KicadDocsGenerator-${{ steps.extract_version.outputs.version }}.zip
           asset_content_type: application/zip
