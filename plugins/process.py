@@ -205,12 +205,26 @@ class ProcessManager:
                     unique_id = str(bom_designators[footprint.GetReference()])
                     bom_designators[footprint.GetReference()] -= 1
 
-                # merge similar parts into single entry
+                mfr_pn = self._get_mfr_pn_from_footprint(footprint)
+                normalized_footprint = self._normalize_footprint_name(footprint_name)
+
+                # merge identical parts into a single BOM line: a given
+                # manufacturer part number identifies the part for purchasing
+                # (the same part may sit on differently named footprints,
+                # e.g. CM4_Connector_1/_2); parts without a part number fall
+                # back to footprint + value so they do not all collapse
+                # into one meaningless line
                 insert = True
                 for component in self.bom:
-                    if component["Mfr_Part_Number"] == self._get_mfr_pn_from_footprint(
-                        footprint
-                    ):
+                    if mfr_pn:
+                        same_part = component["Mfr_Part_Number"] == mfr_pn
+                    else:
+                        same_part = (
+                            component["Mfr_Part_Number"] == ""
+                            and component["Footprint"] == normalized_footprint
+                            and component["Value"] == footprint.GetValue()
+                        )
+                    if same_part:
                         component["Designator"] += ", " + "{}{}{}".format(
                             footprint.GetReference(),
                             "" if unique_id == "" else "_",
@@ -232,14 +246,10 @@ class ProcessManager:
                                     "" if unique_id == "" else "_",
                                     unique_id,
                                 ),
-                                "Footprint": self._normalize_footprint_name(
-                                    footprint_name
-                                ),
+                                "Footprint": normalized_footprint,
                                 "Value": footprint.GetValue(),
                                 # 'Mount': mount_type,
-                                "Mfr_Part_Number": self._get_mfr_pn_from_footprint(
-                                    footprint
-                                ),
+                                "Mfr_Part_Number": mfr_pn,
                                 "Mfr_Name": self._get_mfr_name_from_footprint(
                                     footprint
                                 ),
@@ -294,7 +304,7 @@ class ProcessManager:
     def generate_bom(self, temp_dir, project_name):
         logging.info("Starting BOM generation...")
         name = os.path.join(temp_dir, "Bill of Materials-" + project_name)
-        bom_path = os.path.join(temp_dir, name + ".csv")
+        bom_path = name + ".csv"
 
         if len(self.bom) > 0:
             with open(bom_path, "w", newline="", encoding="utf-8") as outfile:
@@ -311,36 +321,14 @@ class ProcessManager:
             writer = pd.ExcelWriter(name + ".xlsx")
             read_file = pd.read_csv(bom_path)
             read_file.to_excel(writer, sheet_name="BOM", index=False, na_rep="NaN")
+            sheet = writer.sheets["BOM"]
             for column in read_file:
-                column_width = max(
-                    read_file[column].astype(str).map(len).max(), len(column)
-                )
+                # astype first, then fillna: pandas >= 3 keeps NaN through
+                # astype(str) and fillna("") on float columns warns
+                widths = read_file[column].astype(str).fillna("").str.len().max()
+                column_width = max(0 if pd.isna(widths) else int(widths), len(column))
                 col_idx = read_file.columns.get_loc(column)
-                try:
-                    # Добавляем отладочный вывод для понимания структуры writer
-                    logging.info(f"writer type: {type(writer)}")
-                    logging.info(f"writer object: {writer}")
-                    logging.info(f"writer.sheets type: {type(writer.sheets)}")
-                    logging.info(f"writer.sheets content: {writer.sheets}")
-                    logging.info(f"Available sheets: {list(writer.sheets.keys())}")
-                    logging.info(f"Column: {column}, col_idx: {col_idx}, column_width: {column_width}")
-
-                    sheet = writer.sheets["BOM"]
-                    logging.info(f"Sheet type: {type(sheet)}")
-                    logging.info(f"Sheet object: {sheet}")
-
-                    sheet.set_column(col_idx, col_idx, column_width)
-                    logging.info(f"Successfully set column width for column {column}")
-                except Exception as e:
-                    logging.error(
-                        f"Failed to set column width for column {column}: {str(e)}"
-                    )
-                    logging.error(f"writer type: {type(writer)}")
-                    logging.error(f"writer object: {writer}")
-                    logging.error(f"writer.sheets type: {type(writer.sheets)}")
-                    logging.error(f"writer.sheets content: {writer.sheets}")
-                    logging.error(f"Available sheets: {list(writer.sheets.keys())}")
-                    raise Exception(e)
+                sheet.set_column(col_idx, col_idx, column_width)
 
             writer.close()
         logging.info("BOM generation completed.")
@@ -444,19 +432,14 @@ class ProcessManager:
             index=False,
             na_rep=" ",
         )
-
+        sheet = writer.sheets["Stackup"]
         for column in df1:
-            column_width = max(df1[column].astype(str).map(len).max(), len(column))
+            # astype first, then fillna: pandas >= 3 keeps NaN through
+            # astype(str) and fillna("") on float columns warns
+            widths = df1[column].astype(str).fillna("").str.len().max()
+            column_width = max(0 if pd.isna(widths) else int(widths), len(column))
             col_idx = df1.columns.get_loc(column)
-            try:
-                writer.sheets["Stackup"].set_column(
-                    col_idx, col_idx, column_width * 1.5, fmt
-                )
-            except Exception as e:
-                logging.error(
-                    f"Failed to set column width for column {column}: {str(e)}"
-                )
-                raise Exception(e)
+            sheet.set_column(col_idx, col_idx, column_width * 1.5, fmt)
 
         writer.close()
         logging.info("Stackup info generation completed.")
@@ -469,94 +452,81 @@ class ProcessManager:
         logging.info("Archive generation completed.")
         return temp_file
 
+    @staticmethod
+    def _get_first_field_text(footprint, keys, fallback_keys=()):
+        """Return the first non-empty value among the given footprint fields.
+
+        KiCad >= 9 raises an exception for a missing field ("Field not
+        found: ..."), older versions return an empty string - treat both
+        as "field not present".
+        """
+        for key in list(keys) + list(fallback_keys):
+            try:
+                value = footprint.GetFieldText(key)
+            except Exception:
+                continue
+            if value:
+                return value
+        return ""
+
     def _get_lcsc_pn_from_footprint(self, footprint):
-        """'Get the MPN/LCSC stock code from standard symbol fields."""
+        """Get the LCSC stock code from standard symbol fields."""
         keys = ["LCSC_Part", "JLCPCB Part"]
         fallback_keys = ["LCSC", "JLC", "MPN", "Mpn", "mpn"]
-
-        for key in keys:
-            return footprint.GetFieldText(key)
-
-        for key in fallback_keys:
-            return footprint.GetFieldText(key)
+        return self._get_first_field_text(footprint, keys, fallback_keys)
 
     def _get_mfr_name_from_footprint(self, footprint):
-        keys = ["Mfr_Name"]
-
-        for key in keys:
-            return footprint.GetFieldText(key)
+        """Get the manufacturer name from standard symbol fields."""
+        return self._get_first_field_text(footprint, ["Mfr_Name"])
 
     def _get_mfr_pn_from_footprint(self, footprint):
-        """'Get the MPN/LCSC stock code from standard symbol fields."""
-        keys = ["Mfr_Part_Number"]
-
-        for key in keys:
-            return footprint.GetFieldText(key)
+        """Get the manufacturer part number from standard symbol fields."""
+        return self._get_first_field_text(footprint, ["Mfr_Part_Number"])
 
     def _get_link_from_footprint(self, footprint):
-        """'Get the MPN/LCSC stock code from standard symbol fields."""
-        keys = ["Link"]
-
-        for key in keys:
-            return footprint.GetFieldText(key)
+        """Get the purchase link from standard symbol fields."""
+        return self._get_first_field_text(footprint, ["Link"])
 
     def _get_unit_price_from_footprint(self, footprint):
-        """'Get the MPN/LCSC stock code from standard symbol fields."""
-        keys = ["Unit price"]
-
-        for key in keys:
-            return footprint.GetFieldText(key)
+        """Get the unit price from standard symbol fields."""
+        return self._get_first_field_text(footprint, ["Unit price"])
 
     def _get_rotation_offset_from_footprint(self, footprint) -> float:
         """Get the rotation from standard symbol fields."""
         keys = ["JLCPCB Rotation Offset"]
         fallback_keys = ["JlcRotOffset", "JLCRotOffset"]
 
-        offset = None
+        offset = self._get_first_field_text(footprint, keys, fallback_keys)
 
-        try:
-            for key in keys + fallback_keys:
-                offset = footprint.GetFieldText(key)
-                break
-        except Exception as e:
-            logging.error(str(e))
-
-        if offset is None or offset == "":
+        if not offset:
             return 0
-        else:
-            try:
-                return float(offset)
-            except ValueError:
-                raise RuntimeError(
-                    "Rotation offset of {} is not a valid number".format(
-                        footprint.GetReference()
-                    )
+        try:
+            return float(offset)
+        except ValueError:
+            raise RuntimeError(
+                "Rotation offset of {} is not a valid number".format(
+                    footprint.GetReference()
                 )
+            )
 
     def _get_position_offset_from_footprint(self, footprint):
+        """Get the position offset from standard symbol fields."""
         keys = ["JLCPCB Position Offset"]
         fallback_keys = ["JlcPosOffset", "JLCPosOffset"]
 
-        offset = None
+        offset = self._get_first_field_text(footprint, keys, fallback_keys)
 
-        try:
-            for key in keys + fallback_keys:
-                offset = footprint.GetFieldText(key)
-                break
-        except Exception as e:
-            logging.error(str(e))
-
-        if offset is None or offset == "":
+        if not offset:
             return (0, 0)
-        else:
-            try:
-                return (float(offset.split(",")[0]), float(offset.split(",")[1]))
-            except ValueError:
-                raise RuntimeError(
-                    "Position offset of {} is not a valid pair of numbers".format(
-                        footprint.GetReference()
-                    )
+        try:
+            x, y = offset.split(",")
+            return (float(x), float(y))
+        except ValueError:
+            raise RuntimeError(
+                "Position offset of {} is not a valid pair of numbers".format(
+                    footprint.GetReference()
                 )
+            )
 
     def _normalize_footprint_name(self, footprint):
         # replace footprint names of resistors, capacitors, inductors, diodes, LEDs, fuses etc, with the footprint size only

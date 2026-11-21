@@ -32,10 +32,8 @@ class ProcessThread(Thread):
         Thread.__init__(self)
         self.process_manager = ProcessManager()
         self.wx = wx
-        self.start()
 
         config = configparser.ConfigParser()
-        plot_config = None
         config_file = os.path.join(
             os.path.dirname(self.process_manager.board.GetFileName()), "docs.config.ini"
         )
@@ -64,6 +62,10 @@ class ProcessThread(Thread):
             self.create_svg = bool_convert(config.get("main", "create_svg"))
         else:
             logging.info("plot_config FAILED " + str(plot_config))
+
+        # Start the thread only after all attributes are initialized,
+        # otherwise run() may race the config values read above.
+        self.start()
 
     def open_folder(self, path):
         system_name = platform.system()

@@ -1,0 +1,6 @@
+# Development / test dependencies (the plugin itself runs inside KiCad's
+# bundled Python; runtime deps for users are listed in README.md).
+pytest
+pandas
+openpyxl
+xlsxwriter

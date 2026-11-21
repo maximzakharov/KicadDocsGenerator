@@ -44,3 +44,23 @@ To install this plugin via a file, follow these steps:
 
 When PyMuPDF (fitz) is installed with pip, KiCad crashes with a segmentation fault when Plugin is loaded. Plugin loads when the PCB Editor loads, so the crash happens directly when the PCB Editor is started. If this happens:
  `sudo apt install python3-fitz`
+
+
+## Development
+
+To hack on the plugin without rebuilding release zips, use the dev installer —
+it symlinks this checkout into every KiCad found on the machine (restart
+KiCad after code changes, ActionPlugins register at startup):
+
+```bash
+./install-local.sh --list           # show detected KiCad versions
+./install-local.sh                  # symlink into all of them
+./install-local.sh --uninstall      # remove
+```
+
+Tests run outside KiCad (pcbnew/wx are mocked):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -v
+```

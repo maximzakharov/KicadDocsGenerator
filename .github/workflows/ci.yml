@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install test dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Byte-compile plugin sources
+        run: python -m py_compile plugins/*.py
+
+      - name: Run tests
+        run: pytest -v

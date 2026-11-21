@@ -161,8 +161,10 @@ def plot_gerbers(
 
     # Check if we're able to write to the output file.
     try:
-        # os.access(os.path.join(output_dir, final_assembly_file), os.W_OK)
-        open(os.path.join(output_dir, final_assembly_file), "w")
+        # Append mode does not truncate the file, but still fails when
+        # the file is locked by another application (e.g. a PDF viewer).
+        with open(os.path.join(output_dir, final_assembly_file), "a"):
+            pass
     except Exception as e:
         error_msg = f"The output file is not writable. Perhaps it's open in another application?\n\n{final_assembly_file_with_path} {str(e)}"
         logging.error(error_msg)
